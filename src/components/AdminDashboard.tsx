@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Plus, Trash2, Calendar, FileText, ShoppingBag, PlusCircle, CheckCircle, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, Calendar, FileText, ShoppingBag, PlusCircle, CheckCircle, Clock, ChevronDown, ChevronUp, Edit2 } from 'lucide-react';
 
 interface Product {
   id: string;
@@ -49,6 +49,7 @@ export default function AdminDashboard({ initialProducts, initialQuotes }: Admin
 
   // Product form state
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     category: 'Correas',
@@ -75,14 +76,37 @@ export default function AdminDashboard({ initialProducts, initialQuotes }: Admin
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleEditClick = (product: Product) => {
+    setEditingProductId(product.id);
+    setFormData({
+      name: product.name,
+      category: product.category || 'Correas',
+      price: product.price.toString(),
+      description: product.description || '',
+      imageUrl: product.imageUrl || '',
+    });
+    setShowAddForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelForm = () => {
+    setShowAddForm(false);
+    setEditingProductId(null);
+    setFormData({ name: '', category: 'Correas', price: '', description: '', imageUrl: '' });
+    setFormError('');
+  };
+
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormLoading(true);
     setFormError('');
 
     try {
-      const response = await fetch('/api/productos', {
-        method: 'POST',
+      const url = editingProductId ? `/api/productos/${editingProductId}` : '/api/productos';
+      const method = editingProductId ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
@@ -90,11 +114,14 @@ export default function AdminDashboard({ initialProducts, initialQuotes }: Admin
       const data = await response.json();
 
       if (response.ok) {
-        setProducts((prev) => [data.product, ...prev]);
-        setFormData({ name: '', category: 'Correas', price: '', description: '', imageUrl: '' });
-        setShowAddForm(false);
+        if (editingProductId) {
+          setProducts((prev) => prev.map(p => p.id === editingProductId ? data.product : p));
+        } else {
+          setProducts((prev) => [data.product, ...prev]);
+        }
+        handleCancelForm();
       } else {
-        throw new Error(data.error || 'No se pudo crear el producto.');
+        throw new Error(data.error || 'No se pudo guardar el producto.');
       }
     } catch (err: any) {
       setFormError(err.message || 'Error de conexión.');
@@ -133,7 +160,14 @@ export default function AdminDashboard({ initialProducts, initialQuotes }: Admin
         
         {activeTab === 'products' && (
           <button
-            onClick={() => setShowAddForm(!showAddForm)}
+            onClick={() => {
+              if (showAddForm && !editingProductId) {
+                handleCancelForm();
+              } else {
+                handleCancelForm();
+                setShowAddForm(true);
+              }
+            }}
             className="sm:self-center inline-flex items-center justify-center gap-1.5 rounded bg-brand-mint text-brand-dark px-4 py-2.5 text-xs font-semibold hover:bg-opacity-95 shadow active:scale-95 transition-all cursor-pointer"
           >
             <Plus className="h-4 w-4" />
@@ -172,8 +206,8 @@ export default function AdminDashboard({ initialProducts, initialQuotes }: Admin
       {showAddForm && activeTab === 'products' && (
         <div className="bg-white p-6 rounded-lg border border-brand-gray-medium shadow-sm space-y-4 max-w-xl">
           <div className="border-l-4 border-brand-dark pl-3">
-            <h2 className="text-lg font-bold text-brand-dark">Añadir Nuevo Producto</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Completá la información del catálogo</p>
+            <h2 className="text-lg font-bold text-brand-dark">{editingProductId ? 'Editar Producto' : 'Añadir Nuevo Producto'}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{editingProductId ? 'Modificá la información del producto' : 'Completá la información del catálogo'}</p>
           </div>
 
           {formError && (
@@ -271,7 +305,7 @@ export default function AdminDashboard({ initialProducts, initialQuotes }: Admin
             <div className="flex gap-2 justify-end">
               <button
                 type="button"
-                onClick={() => setShowAddForm(false)}
+                onClick={handleCancelForm}
                 className="rounded bg-brand-gray-light border border-brand-gray-medium text-brand-dark px-4 py-2 text-xs font-semibold hover:bg-gray-100 cursor-pointer"
               >
                 Cancelar
@@ -281,7 +315,7 @@ export default function AdminDashboard({ initialProducts, initialQuotes }: Admin
                 disabled={formLoading}
                 className="rounded bg-brand-dark text-white px-4 py-2 text-xs font-semibold hover:bg-opacity-95 shadow cursor-pointer disabled:opacity-50"
               >
-                {formLoading ? 'Guardando...' : 'Guardar Producto'}
+                {formLoading ? 'Guardando...' : (editingProductId ? 'Actualizar Producto' : 'Guardar Producto')}
               </button>
             </div>
           </form>
@@ -317,7 +351,14 @@ export default function AdminDashboard({ initialProducts, initialQuotes }: Admin
                       <td className="px-6 py-4 text-sm font-bold text-brand-dark text-right">
                         {formatPrice(product.price)}
                       </td>
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <button
+                          onClick={() => handleEditClick(product)}
+                          className="text-gray-400 hover:text-brand-blue transition-colors p-1.5 rounded-full hover:bg-gray-50 cursor-pointer inline-flex mr-1"
+                          title="Editar producto"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
                         <button
                           onClick={() => handleDeleteProduct(product.id)}
                           className="text-gray-400 hover:text-rose-600 transition-colors p-1.5 rounded-full hover:bg-gray-50 cursor-pointer inline-flex"
